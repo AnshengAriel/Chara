@@ -1,0 +1,118 @@
+plugins {
+    id 'java'
+    id 'org.openjfx.javafxplugin' version '0.0.9'
+    id "org.beryx.jlink" version "2.22.1"
+}
+
+group 'net.cassite.desktop.chara'
+version loadVersion()
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+compileJava.options.encoding = "UTF-8"
+compileTestJava.options.encoding = "UTF-8"
+
+javafx {
+    version = 11
+    modules = ['javafx.controls', 'javafx.swing']
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+jar {
+    //noinspection GrDeprecatedAPIUsage
+    archiveName = 'chara.jar'
+    manifest {
+        attributes 'Main-Class': 'net.cassite.desktop.chara.Main'
+    }
+}
+
+jlink {
+    options = ['--compress', '2', '--no-header-files', '--no-man-pages']
+    launcher {
+        name = 'chara'
+        noConsole = true
+        jvmArgs = ['-verbose:gc']
+    }
+    jpackage {
+        def currentOs = org.gradle.internal.os.OperatingSystem.current()
+        def imgType = currentOs.windows ? 'ico' : currentOs.macOsX ? 'icns' : 'png'
+        icon = 'src/main/resources/chara.' + imgType
+        if (currentOs.windows) {
+            // jpackageHome = '../../jdk-16'
+            // installerOptions += ['--resource-dir', "jpackage-resources/"]
+            skipInstaller = true
+            installerOptions += ['--vendor', 'raven']
+            // installerOptions += ['--win-dir-chooser', '--win-shortcut', '--win-menu-group', '--win-menu']
+        }
+    }
+}
+
+task jpackageZipDLL(type: Copy) {
+    dependsOn jpackage
+    def currentOs = org.gradle.internal.os.OperatingSystem.current()
+    if (!currentOs.windows) { return }
+    from file("$buildDir/jpackage/chara/runtime/bin/zip.dll")
+    into file("$buildDir/jpackage/chara/")
+}
+
+task jpackageExecInstaller {
+    dependsOn jpackageZipDLL
+    def currentOs = org.gradle.internal.os.OperatingSystem.current()
+    if (!currentOs.windows) {
+        return
+    }
+    doLast {
+        exec {
+            workingDir "$buildDir/jpackage"
+            commandLine 'jpackage.exe', '--name', 'chara', '--app-version', version, '--app-image', 'chara', '--type', 'msi', '--vendor', 'raven', '--win-dir-chooser', '--win-shortcut', '--win-menu-group', 'chara', '--win-menu', '--win-upgrade-uuid', '06e53173-67da-4a7d-9ee7-efade373d4b8'
+        }
+    }
+}
+
+task jpackagePost {
+    dependsOn jpackageExecInstaller
+}
+
+application {
+    mainClass = 'net.cassite.desktop.chara.Main'
+}
+
+dependencies {
+    compile group: 'com.1stleg', name: 'jnativehook', version: loadJnativeHookVersion()
+    compile files('../vproxy.jar')
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+def loadVersion() {
+    def PREFIX = "public static final String VERSION = \""
+    def SUFFIX = "\"; // _THE_VERSION_"
+    def ver = file(projectDir.getAbsolutePath() + "/src/main/java/net/cassite/desktop/chara/util/Consts.java")
+    def lines = ver.getText().split("\n")
+    for (def line : lines) {
+        line = line.trim()
+        if (line.startsWith(PREFIX) && line.endsWith(SUFFIX)) {
+            return line.substring(PREFIX.length(), line.length() - SUFFIX.length())
+        }
+    }
+    return "unknown"
+}
+
+def loadJnativeHookVersion() {
+    def PREFIX = "public static final String JNATIVEHOOK_VERSION = \""
+    def SUFFIX = "\"; // _THE_JNATIVE_HOOK_VERSION_"
+    def ver = file(projectDir.getAbsolutePath() + "/src/main/java/net/cassite/desktop/chara/util/Consts.java")
+    def lines = ver.getText().split("\n")
+    for (def line : lines) {
+        line = line.trim()
+        if (line.startsWith(PREFIX) && line.endsWith(SUFFIX)) {
+            return line.substring(PREFIX.length(), line.length() - SUFFIX.length())
+        }
+    }
+    return "unknown"
+}
